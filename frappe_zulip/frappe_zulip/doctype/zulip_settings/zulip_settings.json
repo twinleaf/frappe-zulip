@@ -1,0 +1,123 @@
+{
+ "actions": [],
+ "creation": "2026-10-02 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "dry_run",
+  "connection_section",
+  "server_url",
+  "bot_email",
+  "column_break_conn",
+  "api_key",
+  "channel_posts_section",
+  "default_channel",
+  "column_break_posts",
+  "default_topic",
+  "direct_messages_section",
+  "dm_notification_types"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "default": "0",
+   "description": "Record messages in the Zulip Message log without sending them.",
+   "fieldname": "dry_run",
+   "fieldtype": "Check",
+   "label": "Dry Run"
+  },
+  {
+   "fieldname": "connection_section",
+   "fieldtype": "Section Break",
+   "label": "Connection"
+  },
+  {
+   "fieldname": "server_url",
+   "fieldtype": "Data",
+   "label": "Zulip Server URL",
+   "mandatory_depends_on": "enabled",
+   "options": "URL"
+  },
+  {
+   "description": "Create an <b>Incoming webhook</b> bot in Zulip under Personal settings → Bots.",
+   "fieldname": "bot_email",
+   "fieldtype": "Data",
+   "label": "Bot Email",
+   "mandatory_depends_on": "enabled",
+   "options": "Email"
+  },
+  {
+   "fieldname": "column_break_conn",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "api_key",
+   "fieldtype": "Password",
+   "label": "Bot API Key",
+   "mandatory_depends_on": "enabled"
+  },
+  {
+   "fieldname": "channel_posts_section",
+   "fieldtype": "Section Break",
+   "label": "Channel Posts",
+   "description": "Where Zulip notification rules post unless they set their own channel or topic."
+  },
+  {
+   "default": "ERPNext",
+   "fieldname": "default_channel",
+   "fieldtype": "Data",
+   "label": "Default Channel"
+  },
+  {
+   "fieldname": "column_break_posts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Notifications",
+   "fieldname": "default_topic",
+   "fieldtype": "Data",
+   "label": "Default Topic"
+  },
+  {
+   "fieldname": "direct_messages_section",
+   "fieldtype": "Section Break",
+   "label": "Direct Messages"
+  },
+  {
+   "description": "Notifications of these types (the bell icon) are also sent to the user as a Zulip direct message. Users can opt out under My Settings → Notifications.",
+   "fieldname": "dm_notification_types",
+   "fieldtype": "Table MultiSelect",
+   "label": "Forward These Notification Types",
+   "options": "Notification Type Preference"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-06 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Frappe Zulip",
+ "name": "Zulip Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
