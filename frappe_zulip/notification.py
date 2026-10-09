@@ -1,11 +1,19 @@
+import json
+
 import frappe
 from frappe import _
-from frappe.email.doctype.notification.notification import get_reference_doctype, get_reference_name
-from frappe.utils import get_url_to_form
+from frappe.email.doctype.notification.notification import (
+	get_context,
+	get_reference_doctype,
+	get_reference_name,
+)
+from frappe.utils import add_days, cint, get_url_to_form, getdate, nowdate
+from frappe.utils.data import evaluate_filters
 from frappe.utils.jinja import validate_template
 
 from frappe_zulip import formatting
 from frappe_zulip.frappe_zulip.doctype.zulip_settings.zulip_settings import get_settings
+from frappe_zulip.notification_log import to_markdown
 from frappe_zulip.outbox import queue_channel_message, queue_direct_message
 from frappe_zulip.users import get_mention, get_topic
 
@@ -28,6 +36,42 @@ class ZulipNotificationMixin:
 		if self.zulip_topic:
 			validate_template(self.zulip_topic)
 
+	def get_documents_for_today(self):
+		every = self.repeat_days()
+		if not every:
+			return super().get_documents_for_today()
+
+		# Core only matches documents dated exactly days_in_advance ago. Also match
+		# every `every` days after that; the condition decides when to stop.
+		last_due = getdate(add_days(nowdate(), -self.days_in_advance))
+		rows = frappe.get_all(
+			self.document_type,
+			filters={self.date_changed: ("<=", f"{last_due} 23:59:59.000000")},
+			fields=["name", self.date_changed],
+		)
+		names = [
+			row.name
+			for row in rows
+			if row[self.date_changed] and (last_due - getdate(row[self.date_changed])).days % every == 0
+		]
+
+		filters = json.loads(self.filters) if self.condition_type == "Filters" and self.filters else None
+		docs = []
+		for name in names:
+			doc = frappe.get_lazy_doc(self.document_type, name)
+			if self.condition_type == "Python" and self.condition:
+				if not frappe.safe_eval(self.condition, None, get_context(doc)):
+					continue
+			elif filters and not evaluate_filters(doc, filters):
+				continue
+			docs.append(doc)
+		return docs
+
+	def repeat_days(self) -> int:
+		if self.channel != "Zulip" or self.event != "Days After":
+			return 0
+		return max(cint(self.zulip_repeat_days), 0)
+
 	def send_notification_by_channel(self, doc, context):
 		if self.channel == "Zulip":
 			try:
@@ -37,7 +81,10 @@ class ZulipNotificationMixin:
 		super().send_notification_by_channel(doc, context)
 
 	def send_zulip_message(self, doc, context):
-		context = {**context, "zulip": frappe._dict(mention=get_mention, topic=get_topic)}
+		context = {
+			**context,
+			"zulip": frappe._dict(mention=get_mention, topic=get_topic, markdown=to_markdown),
+		}
 		reference_doctype, reference_name = get_reference_doctype(doc), get_reference_name(doc)
 		reference = {
 			"reference_doctype": reference_doctype,

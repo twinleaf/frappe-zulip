@@ -4,9 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.desk.doctype.notification_settings.notification_settings import create_notification_settings
-from frappe.email.doctype.notification.notification import clear_notification_cache
+from frappe.email.doctype.notification.notification import clear_notification_cache, evaluate_alert
 from frappe.tests import IntegrationTestCase
-from frappe.utils import add_days, add_to_date, get_url_to_form, now_datetime
+from frappe.utils import add_days, add_to_date, get_url_to_form, now_datetime, nowdate
 
 from frappe_zulip.frappe_zulip.doctype.zulip_message.zulip_message import MAX_ATTEMPTS, ZulipMessage
 from frappe_zulip.outbox import deliver, queue_channel_message, queue_direct_message, retry_pending
@@ -218,6 +218,51 @@ class TestZulipIntegration(IntegrationTestCase):
 
 		[post] = self.get_messages(notification)
 		self.assertEqual((post.channel, post.topic), ("erp-test", f"{todo.name}: Calibrate"))
+
+	def make_todo(self, days_from_today, **values):
+		return frappe.get_doc(
+			{
+				"doctype": "ToDo",
+				"description": "Calibrate",
+				"allocated_to": USER,
+				"date": add_days(nowdate(), days_from_today),
+				**values,
+			}
+		).insert()
+
+	def test_overdue_repeats(self):
+		todos = {days_late: self.make_todo(-days_late).name for days_late in (0, 1, 2, 3, 4, 7, 8)}
+		closed = self.make_todo(-4, status="Closed").name
+		notification = self.make_notification(
+			event="Days After",
+			date_changed="date",
+			days_in_advance=1,
+			condition='doc.status == "Open"',
+			zulip_repeat_days=3,
+		).insert()
+
+		def matches():
+			found = {doc.name for doc in notification.get_documents_for_today()}
+			return sorted(days for days, name in todos.items() if name in found), closed in found
+
+		# First reminder a day late, then every 3 days.
+		self.assertEqual(matches(), ([1, 4, 7], False))
+
+		notification.zulip_repeat_days = 0
+		self.assertEqual(matches(), ([1], False))
+
+	def test_todo_due_tomorrow_rule(self):
+		notification = frappe.get_doc("Notification", "Zulip: ToDo Due Tomorrow")
+		todo = self.make_todo(
+			1, description="<p>Calibrate &amp; ship</p>", reference_type="User", reference_name=USER
+		)
+		self.assertIn(todo.name, {doc.name for doc in notification.get_documents_for_today()})
+
+		evaluate_alert(todo, notification, notification.event)
+		[dm] = self.get_messages(notification)
+		self.assertEqual(dm.user, USER)
+		self.assertTrue(dm.content.startswith(":calendar: **Due tomorrow:** Calibrate & ship"))
+		self.assertIn(f"[User {USER}]({get_url_to_form('User', USER)})", dm.content)
 
 	def test_notification_log_forwarded(self):
 		frappe.get_doc(

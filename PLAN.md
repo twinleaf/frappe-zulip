@@ -91,9 +91,16 @@ Send ERPNext events to a Zulip server, either as posts in a channel, as direct m
 | Task created | New, status not Template | Post in ERPNext › Notifications |
 | Task assigned | Notification Log copy | DM to assignee |
 | Task due tomorrow | Days Before 1 on `exp_end_date`, status not Completed/Cancelled | DM to assignees |
-| Task overdue | Days After 1 on `exp_end_date`, same condition | Post in ERPNext › Notifications, @-mentioning the assignees |
+| Task overdue | Days After 1 on `exp_end_date`, same condition, repeated every 7 days | Post in ERPNext › Notifications, @-mentioning the assignees |
 | Task completed | Value Change on `status` → Completed | Post in ERPNext › Notifications |
 | @mention in any comment | Notification Log copy | DM |
+| To Do due tomorrow | Days Before 1 on ToDo `date`, status Open, not for Task or Asset Maintenance | DM to the assignee |
+| Asset maintenance due tomorrow | Days Before 1 on Asset Maintenance Log `due_date`, status Planned or Overdue | DM to `task_assignee_email` |
+| Asset maintenance overdue | Days After 1 on `due_date`, same condition, repeated every 7 days | DM to `task_assignee_email` |
+
+Asset Maintenance creates one ToDo per assignee and leaves its date at the first due date after later cycles are logged. Each Asset Maintenance Log, by contrast, has the cycle's real due date and status, so the maintenance rules use the log.
+
+Frappe's Days After fires only on the day that exactly matches. `zulip_repeat_days` on Notification makes a Zulip rule also match every N days after that. The mixin overrides `get_documents_for_today`, and the rule's condition decides when it stops.
 
 Proposed next, to confirm with the team:
 - Sales Order submitted → `#erp-sales`

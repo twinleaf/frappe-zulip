@@ -64,6 +64,15 @@ CUSTOM_FIELDS = {
 			"depends_on": "zulip_post_to_channel",
 			"insert_after": "zulip_dm_recipients",
 		},
+		{
+			"fieldname": "zulip_repeat_days",
+			"fieldtype": "Int",
+			"label": "Repeat Every (Days)",
+			"description": "Send again every this many days while the condition still holds. 0 sends once.",
+			"depends_on": "eval:doc.event=='Days After'",
+			"non_negative": 1,
+			"insert_after": "zulip_mention_recipients",
+		},
 	],
 	"User": [
 		{
@@ -119,15 +128,18 @@ def after_install():
 				settings.append("dm_notification_types", {"notification_type": notification_type})
 		settings.save()
 
-	insert_task_notifications()
+	insert_notifications()
 
 
-def insert_task_notifications():
-	"""Insert the Task rules that don't exist yet. Existing rules are left as they are."""
-	if not frappe.db.exists("DocType", "Task"):
-		return
-	for notification in TASK_NOTIFICATIONS:
-		if not frappe.db.exists("Notification", notification["name"]):
+def insert_notifications():
+	"""Insert the built-in rules that don't exist yet. Existing rules are left as they are.
+
+	Rules for a doctype that isn't installed (Task and Asset Maintenance Log come from ERPNext) are skipped.
+	"""
+	for notification in NOTIFICATIONS:
+		if frappe.db.exists("DocType", notification["document_type"]) and not frappe.db.exists(
+			"Notification", notification["name"]
+		):
 			frappe.get_doc({"doctype": "Notification", **notification}).insert()
 
 
@@ -148,7 +160,12 @@ def before_uninstall():
 
 OPEN_TASK = 'doc.status not in ("Completed", "Cancelled", "Template")'
 
-TASK_NOTIFICATIONS = [
+# Days between repeated overdue reminders.
+OVERDUE_REPEAT_DAYS = 7
+OPEN_MAINTENANCE = 'doc.maintenance_status in ("Planned", "Overdue")'
+MAINTENANCE_RECIPIENTS = [{"receiver_by_document_field": "task_assignee_email"}]
+
+NOTIFICATIONS = [
 	{
 		"name": "Zulip: Task Created",
 		"enabled": 1,
@@ -186,6 +203,7 @@ TASK_NOTIFICATIONS = [
 		"zulip_post_to_channel": 1,
 		# The mention notifies the assignees, so no DM as well.
 		"zulip_mention_recipients": 1,
+		"zulip_repeat_days": OVERDUE_REPEAT_DAYS,
 		"message": ":warning: **Overdue:** {{ doc.subject }} was due {{ doc.exp_end_date }}",
 	},
 	{
@@ -199,5 +217,54 @@ TASK_NOTIFICATIONS = [
 		"zulip_post_to_channel": 1,
 		"message": ":check: {{ zulip.mention(doc.completed_by or doc.modified_by, silent=True) }} "
 		"completed **{{ doc.subject }}**",
+	},
+	{
+		# Task has its own rule on exp_end_date. Asset Maintenance keeps one ToDo per assignee
+		# and doesn't move its date on, so the Asset Maintenance Log rules cover it instead.
+		"name": "Zulip: ToDo Due Tomorrow",
+		"enabled": 1,
+		"channel": CHANNEL,
+		"document_type": "ToDo",
+		"event": "Days Before",
+		"date_changed": "date",
+		"days_in_advance": 1,
+		"condition": 'doc.status == "Open" and doc.reference_type not in ("Task", "Asset Maintenance")',
+		"recipients": [{"receiver_by_document_field": "allocated_to"}],
+		"zulip_post_to_channel": 0,
+		"zulip_dm_recipients": 1,
+		"message": ":calendar: **Due tomorrow:** {{ zulip.markdown(doc.description) | truncate(200) }}"
+		"{% if doc.reference_type and doc.reference_name %}\n\n"
+		"[{{ _(doc.reference_type) }} {{ doc.reference_name }}]"
+		"({{ frappe.utils.get_url_to_form(doc.reference_type, doc.reference_name) }}){% endif %}",
+	},
+	{
+		"name": "Zulip: Asset Maintenance Due Tomorrow",
+		"enabled": 1,
+		"channel": CHANNEL,
+		"document_type": "Asset Maintenance Log",
+		"event": "Days Before",
+		"date_changed": "due_date",
+		"days_in_advance": 1,
+		"condition": OPEN_MAINTENANCE,
+		"recipients": MAINTENANCE_RECIPIENTS,
+		"zulip_post_to_channel": 0,
+		"zulip_dm_recipients": 1,
+		"message": ":wrench: **Maintenance due tomorrow:** {{ doc.task_name }} on {{ doc.asset_name }}",
+	},
+	{
+		"name": "Zulip: Asset Maintenance Overdue",
+		"enabled": 1,
+		"channel": CHANNEL,
+		"document_type": "Asset Maintenance Log",
+		"event": "Days After",
+		"date_changed": "due_date",
+		"days_in_advance": 1,
+		"condition": OPEN_MAINTENANCE,
+		"recipients": MAINTENANCE_RECIPIENTS,
+		"zulip_post_to_channel": 0,
+		"zulip_dm_recipients": 1,
+		"zulip_repeat_days": OVERDUE_REPEAT_DAYS,
+		"message": ":warning: **Maintenance overdue:** {{ doc.task_name }} on {{ doc.asset_name }} "
+		"was due {{ doc.due_date }}",
 	},
 ]

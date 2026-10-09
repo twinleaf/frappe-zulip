@@ -37,12 +37,17 @@ To try things out without sending anything, tick **Dry Run**. Messages are then 
 
 ## Notification rules
 
-Four Task rules are installed and enabled. Change or disable them under **Notification**:
+These rules are installed and enabled. Change or disable them under **Notification**:
 
 - **Zulip: Task Created** posts to ERPNext › Notifications.
 - **Zulip: Task Due Tomorrow** DMs the assignees.
-- **Zulip: Task Overdue** posts to ERPNext › Notifications and @-mentions the assignees.
+- **Zulip: Task Overdue** posts to ERPNext › Notifications and @-mentions the assignees, then again every 7 days until the task is closed.
 - **Zulip: Task Completed** posts to ERPNext › Notifications.
+- **Zulip: ToDo Due Tomorrow** DMs the assignee of any open To Do with a due date of tomorrow. To Dos for Tasks and Asset Maintenance are left out because their own rules cover them.
+- **Zulip: Asset Maintenance Due Tomorrow** DMs the assignee of a planned Asset Maintenance Log.
+- **Zulip: Asset Maintenance Overdue** DMs the assignee the day after the due date, then every 7 days until the log is completed or cancelled.
+
+The Task and Asset Maintenance rules are only installed when ERPNext is.
 
 To add a rule, create a Notification and set **Channel** to Zulip. Then set:
 
@@ -51,6 +56,7 @@ To add a rule, create a Notification and set **Channel** to Zulip. Then set:
 - **Zulip Topic**: a Jinja template. Leave empty for the default topic (Notifications). Use `{{ zulip.topic(doc.doctype, doc.name) }}` to give each document its own topic.
 - **Direct Message Each Recipient**: DMs everyone in the Recipients table, or all assignees.
 - **Mention Recipients in Channel Post**: @-mentions them in the channel post.
+- **Repeat Every (Days)**: for Days After rules only. Sends the message again every this many days for as long as the condition holds, so the condition must stop matching once the document is done. 0 sends it once.
 
 Write the **Message** in Zulip Markdown. A link to the document is appended automatically. Templates can use:
 
@@ -59,6 +65,7 @@ Write the **Message** in Zulip Markdown. A link to the document is appended auto
 | `{{ zulip.mention(doc.owner) }}` | `@**Jane Doe\|12**`, which notifies the user (their full name if they haven't been synced) |
 | `{{ zulip.mention(doc.owner, silent=True) }}` | `@_**Jane Doe\|12**`, which names the user without notifying them |
 | `{{ zulip.topic("Project", doc.project) }}` | `PROJ-0007: Gradiometer`, a document's standard topic |
+| `{{ zulip.markdown(doc.description) }}` | The HTML of a text editor field as Zulip Markdown |
 
 Users can turn off Zulip DMs under **My Settings → Notifications → Send Direct Messages to Zulip**.
 
